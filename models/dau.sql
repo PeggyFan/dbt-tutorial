@@ -40,12 +40,14 @@ with web as (
   )
 select {{dbt_utils.surrogate_key(
       'date',
+      'visitor_id',
       'platform') }} as id,
-date, platform,
-count(distinct visitor_id) as dau,
-sum(pageviews) as pageviews,
-sum(case when logged_in = 1 then pageviews end) as logged_in_pageviews,
-count(case when logged_in = 1 then visitor_id end) as logged_in_users
+      *
+    -- date, platform,
+    -- count(distinct visitor_id) as dau,
+    -- sum(pageviews) as pageviews,
+    -- sum(case when logged_in = 1 then pageviews end) as logged_in_pageviews,
+    -- count(case when logged_in = 1 then visitor_id end) as logged_in_users
   from
   (
     select *
@@ -54,4 +56,3 @@ count(case when logged_in = 1 then visitor_id end) as logged_in_users
     select *
     from mobile
 )
-  group by 1,2,3

@@ -7,13 +7,15 @@
     Try changing "table" to "view" below
 */
 
-{{ config(materialized='table') }}
+{{ config(materialized='table')}}
+-- view, will be updated automatically, but potentially slower
+-- table, will not be updated automatically, but potentially faster
 
 with votes as (
-  select date_trunc('date', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
+  select date_trunc('day', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
   user_id,
   count(*) as contributions,
-  'votes' as type_
+  'votes' as type
   from producthunt_db.votes 
   where created_at >= (((getdate() + interval '-7 hour')::date + interval '7 hour') - interval '89 day') and created_at < (getdate() + interval '-7 hour')::date + interval '31 hour'
   and user_id NOT IN (select id from producthunt_db.users where role IN (100))
@@ -23,11 +25,10 @@ with votes as (
   group by 1,2
 )
 , posts as (
-select date_trunc('date', ((scheduled_at + interval '-7 hour'))::timestamp)::date as date, 
+select date_trunc('day', ((scheduled_at + interval '-7 hour'))::timestamp)::date as date, 
     user_id,
-    'products' as subject, 
     count(*) as contributions,
-    'posts' as type_
+    'posts' as type
     from producthunt_db.posts 
     where trashed_at is null 
     and scheduled_at >= (((getdate() + interval '-7 hour')::date + interval '7 hour') - interval '89 day') and scheduled_at < (getdate() + interval '-7 hour')::date + interval '31 hour'
@@ -36,14 +37,13 @@ select date_trunc('date', ((scheduled_at + interval '-7 hour'))::timestamp)::dat
                   from producthunt_db.users 
                   where role IN (3, 10))
     and trashed_at is null
-    group by 1, 2, 3
+    group by 1,2
 )
 , discussions as (
-    select date_trunc('date', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
+    select date_trunc('day', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
     user_id,
-    'discussions' as subject, 
     count(*) as contributions,
-    'discussions' as type_
+    'discussions' as type
     from producthunt_db.discussion_threads 
     where trashed_at is null 
     and created_at >= (((getdate() + interval '-7 hour')::date + interval '7 hour') - interval '89 day') and created_at < (getdate() + interval '-7 hour')::date + interval '31 hour'
@@ -53,27 +53,14 @@ select date_trunc('date', ((scheduled_at + interval '-7 hour'))::timestamp)::dat
                   where role IN (3, 10))
     and status not in ('rejected', 'pending')
     and trashed_at is null
-    group by 1, 2, 3
+    group by 1,2
 )
---     select date_trunc('date', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
---     user_id,
---     'goals' as subject, 
---     count(*) as submissions
---     from producthunt_db.goals  
---     where created_at >= (((getdate() + interval '-7 hour')::date + interval '7 hour') - interval '89 day') and created_at < (getdate() + interval '-7 hour')::date + interval '31 hour'
---     and user_id NOT IN (select id from producthunt_db.users where role IN (100))
---     and user_id NOT IN (select id 
---                   from producthunt_db.users 
---                   where role IN (3, 10))
---     group by 1, 2, 3
---     ) a
---   group by 1,2
 
 , comments as (
-  select date_trunc('date', ((created_at + interval '-7 hour'))::timestamp)::date as date,  
+  select date_trunc('day', ((created_at + interval '-7 hour'))::timestamp)::date as date,  
   user_id,
   count(*) as contributions,
-  'comments' as type_
+  'comments' as type
   from producthunt_db.comments 
   where created_at >= (((getdate() + interval '-7 hour')::date + interval '7 hour') - interval '89 day') and created_at < (getdate() + interval '-7 hour')::date + interval '31 hour'
   and user_id NOT IN (select id from producthunt_db.users where role IN (100))
@@ -84,7 +71,7 @@ select date_trunc('date', ((scheduled_at + interval '-7 hour'))::timestamp)::dat
   group by 1,2
 )
 , reviews as (
-  select date_trunc('date', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
+  select date_trunc('day', ((created_at + interval '-7 hour'))::timestamp)::date as date, 
   user_id,
   count(*) as contributions,
   'reviews' as type
@@ -96,15 +83,25 @@ select date_trunc('date', ((scheduled_at + interval '-7 hour'))::timestamp)::dat
                   where role IN (3, 10))
   group by 1,2
 )
-select *
-from votes 
-union all
-select *
-from submissions
-union all
-select *
-from reviews
-
+select {{ dbt_utils.surrogate_key(
+      'date',
+      'user_id',
+      'type'
+  ) }} as contribution_id,
+  *
+from (
+  select *
+  from votes 
+  union all
+  select *
+  from posts
+  union all
+  select *
+  from discussions
+  union all
+  select *
+  from reviews
+) x 
 /*
     Uncomment the line below to remove records with null `id` values
 */
